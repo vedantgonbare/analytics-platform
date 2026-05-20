@@ -28,4 +28,4 @@ class WebSocketManager:
             self.active_connections.remove(conn)
 
 # Global singleton instance
-manager = WebSocketManager()
+manager = WebSocketManager() 
