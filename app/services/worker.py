@@ -1,15 +1,15 @@
 import json
 import asyncio
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import AsyncSessionLocal
 from app.db.redis import redis_client
 from app.models.event import Event
+from app.services.websocket_manager import manager
 
 EVENTS_QUEUE = "events:queue"
 
 async def process_event(event_data: dict):
-    """Write a single event to PostgreSQL."""
+    """Write a single event to PostgreSQL and broadcast to WS clients."""
     async with AsyncSessionLocal() as session:
         event = Event(
             event_type=event_data.get("event_type"),
@@ -23,14 +23,23 @@ async def process_event(event_data: dict):
         )
         session.add(event)
         await session.commit()
+        await session.refresh(event)
         print(f"[Worker] Processed event: {event.event_type} | id: {event.id}")
+
+        # Broadcast to all WebSocket clients
+        await manager.broadcast({
+            "type": "new_event",
+            "event_type": event.event_type,
+            "user_id": event.user_id,
+            "page": event.page,
+            "timestamp": str(event.timestamp),
+        })
 
 async def run_worker():
     """Continuously poll Redis queue and process events."""
     print("[Worker] Starting... listening on queue:", EVENTS_QUEUE)
     while True:
         try:
-            # BRPOP blocks up to 5s waiting for an item
             result = await redis_client.brpop(EVENTS_QUEUE, timeout=5)
             if result:
                 _, payload = result
