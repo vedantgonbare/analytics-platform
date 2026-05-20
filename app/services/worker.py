@@ -4,12 +4,11 @@ from datetime import datetime
 from app.db.database import AsyncSessionLocal
 from app.db.redis import redis_client
 from app.models.event import Event
-from app.services.websocket_manager import manager
 
 EVENTS_QUEUE = "events:queue"
+EVENTS_CHANNEL = "events:live"
 
 async def process_event(event_data: dict):
-    """Write a single event to PostgreSQL and broadcast to WS clients."""
     async with AsyncSessionLocal() as session:
         event = Event(
             event_type=event_data.get("event_type"),
@@ -26,17 +25,18 @@ async def process_event(event_data: dict):
         await session.refresh(event)
         print(f"[Worker] Processed event: {event.event_type} | id: {event.id}")
 
-        # Broadcast to all WebSocket clients
-        await manager.broadcast({
+        # Publish to Redis channel instead of broadcasting directly
+        message = json.dumps({
             "type": "new_event",
             "event_type": event.event_type,
             "user_id": event.user_id,
             "page": event.page,
             "timestamp": str(event.timestamp),
         })
+        await redis_client.publish(EVENTS_CHANNEL, message)
+        print(f"[Worker] Published to Redis channel: {EVENTS_CHANNEL}")
 
 async def run_worker():
-    """Continuously poll Redis queue and process events."""
     print("[Worker] Starting... listening on queue:", EVENTS_QUEUE)
     while True:
         try:
