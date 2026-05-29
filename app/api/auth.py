@@ -27,8 +27,7 @@ class UserResponse(BaseModel):
     email: str
     is_active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- Register ---
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
